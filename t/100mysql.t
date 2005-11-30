@@ -1,0 +1,81 @@
+use strict;
+use Test::More;
+use Test::Deep;
+
+# APACHE_DBI_CACHE_MYSQL1 and APACHE_DBI_CACHE_MYSQL2 should point to
+# 2 different databases on the same host and port.
+
+BEGIN {
+  if( exists $ENV{MYSQL1} and length $ENV{MYSQL1} and
+      exists $ENV{MYSQL2} and length $ENV{MYSQL2} ) {
+    $ENV{MYSQL_HOST}='localhost' unless exists $ENV{MYSQL_HOST};
+    $ENV{MYSQL_USER}='' unless exists $ENV{MYSQL_USER};
+    $ENV{MYSQL_PASSWD}='' unless exists $ENV{MYSQL_PASSWD};
+    plan tests=>7;
+  } else {
+    plan skip_all => 'no database given, see README';
+  }
+}
+
+BEGIN{$ENV{APACHE_DBI_CACHE_ENVPATH}="t/dbenv";}
+
+use Apache::DBI::Cache;
+BEGIN { use_ok('Apache::DBI::Cache::mysql') };
+
+my ($db1, $db2, $host, $user, $pw)=@ENV{qw/MYSQL1
+					   MYSQL2
+					   MYSQL_HOST
+					   MYSQL_USER
+					   MYSQL_PASSWD/};
+
+$Apache::DBI::Cache::DELIMITER='^';
+
+sub current_db {
+  my $dbh=shift;
+
+  my $db;
+  my $id=$dbh->{mysql_thread_id};
+  my $st=$dbh->prepare('show processlist');
+  $st->execute;
+  while( my $l=$st->fetchrow_arrayref ) {
+    $db=$l->[3] if( $l->[0]==$id );
+  }
+  return $db;
+}
+
+Apache::DBI::Cache::connect_on_init
+  ("dbi:mysql:dbname=$db1;host=$host;port=3306", "$user", "$pw" );
+
+Apache::DBI::Cache::connect_on_init
+  ("dbi:mysql:$db2:$host", "$user", "$pw" );
+
+Apache::DBI::Cache::init;
+
+my $stat=Apache::DBI::Cache::statistics;
+
+cmp_deeply( $stat->{"mysql^host=$host;port=3306^$user"}, [2,2,2,0,0],
+	    'connect_on_init' );
+
+my $dbh=DBI->connect("dbi:mysql:$db2:$host:3306", "$user", "$pw" );
+ok( $dbh->{mysql_auto_reconnect}==0, 'mysql_auto_reconnect==0' );
+
+cmp_deeply( $stat->{"mysql^host=$host;port=3306^$user"}, [2,1,3,0,0],
+	    'usage count' );
+
+my ($dba, $dbb);
+cmp_deeply( current_db($dba=DBI->connect("dbi:mysql:host=$host;database=$db1", "$user", "$pw" )),
+	    $db1, 'DB1' );
+$dba="$dba";
+
+cmp_deeply( current_db($dbb=DBI->connect("dbi:mysql:port=3306;db=$db2;host=$host", "$user", "$pw" )),
+	    $db2, 'DB2' );
+$dbb="$dbb";
+
+cmp_deeply( $dba, $dbb, 'got the same handle for different databases' );
+
+undef $dbh;
+Apache::DBI::Cache::finish;
+
+# Local Variables:
+# mode: perl
+# End:
