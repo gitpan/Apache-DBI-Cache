@@ -6,8 +6,8 @@ Obsoletes:    p_Apache_DBI_Cache
 Requires:     perl = %{perl_version}
 Autoreqprov:  on
 Summary:      Apache::DBI::Cache
-Version:      0.06
-Release:      2
+Version:      0.07
+Release:      1
 Source:       Apache-DBI-Cache-%{version}.tar.gz
 BuildRoot:    %{_tmppath}/%{name}-%{version}-build
 
@@ -32,6 +32,7 @@ make && make test
 make DESTDIR=$RPM_BUILD_ROOT install_vendor
 %{_gzipbin} -9 $RPM_BUILD_ROOT%{_mandir}/man3/Apache::DBI::Cache.3pm || true
 %{_gzipbin} -9 $RPM_BUILD_ROOT%{_mandir}/man3/Apache::DBI::Cache::mysql.3pm || true
+%{_gzipbin} -9 $RPM_BUILD_ROOT%{_mandir}/man3/Apache::DBI::Cache::ImaDBI.3pm || true
 %perl_process_packlist
 
 %clean
@@ -41,7 +42,6 @@ make DESTDIR=$RPM_BUILD_ROOT install_vendor
 %defattr(-, root, root)
 %{perl_vendorlib}/Apache
 %{perl_vendorarch}/auto/Apache
-%doc %{_mandir}/man3/Apache::DBI::Cache.3pm.gz
-%doc %{_mandir}/man3/Apache::DBI::Cache::mysql.3pm.gz
+%doc %{_mandir}/man3
 /var/adm/perl-modules/perl-Apache-DBI-Cache
 %doc MANIFEST README

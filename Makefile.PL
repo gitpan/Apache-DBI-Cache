@@ -7,6 +7,7 @@ WriteMakefile(
     VERSION_FROM      => 'lib/Apache/DBI/Cache.pm', # finds $VERSION
     PREREQ_PM         => {
 			  DBI=>'1.37',
+			  'DBD::SQLite'=>0,
 			 }, # e.g., Module::Name => 1.1
     dist              => {
                           PREOP => './mk_README.sh',
@@ -22,7 +23,6 @@ README: lib/Apache/DBI/Cache.pm mk_README.sh
 	./mk_README.sh
 
 rpm: dist
-	rpmbuild -bb perl-Apache-DBI-Cache.spec && \
-	rpmbuild -bs perl-Apache-DBI-Cache.spec
+	rpmbuild -ba perl-Apache-DBI-Cache.spec
 EOF
 }

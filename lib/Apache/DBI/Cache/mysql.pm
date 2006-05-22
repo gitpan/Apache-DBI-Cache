@@ -5,7 +5,7 @@ use strict;
 use warnings;
 no warnings 'uninitialized';
 
-our $VERSION = '0.05';
+our $VERSION = '0.06';
 
 BEGIN {
   die "Please load Apache::DBI::Cache before"
@@ -48,7 +48,7 @@ BEGIN {
 	     $dbh->{mysql_auto_reconnect}=0;
 	     $dbh->do('USE '.$ctx->{database});
 	   };
-	   $Apache::DBI::Cache::LOG->(0, "mysql: USE $ctx->{database} failed".($@?": $@":"\n"))
+	   $Apache::DBI::Cache::LOG->(0, "mysql: USE $ctx->{database} failed".($@?": $@":length($_=$dbh->errstr)?": $_":""))
 	     unless($rc);
 	   return $rc;
 	 } else {

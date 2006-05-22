@@ -5,7 +5,7 @@ use strict;
 use warnings;
 no warnings 'uninitialized';
 
-our $VERSION = '0.06';
+our $VERSION = '0.07';
 
 BEGIN { eval { require Apache; } }
 BEGIN { eval { require mod_perl2; require Apache2::Module; } }
@@ -211,8 +211,8 @@ sub _statop {
 		   -Env=>$env,
 		   -Flags=>&BerkeleyDB::DB_CREATE,
 		);
-      $STATdb->filter_store_value( sub {$_=join ':', @$_} );
-      $STATdb->filter_fetch_value( sub {$_=[split ':', $_]} );
+      $STATdb->filter_store_value( sub {no warnings 'uninitialized'; $_=join ':', @$_} );
+      $STATdb->filter_fetch_value( sub {no warnings 'uninitialized'; $_=[split ':', $_]} );
     } else {
       $LOG->(1, "init: working without BerkeleyDB");
     }
@@ -225,7 +225,8 @@ sub _statop {
     my @l;
     for my $aref (@ChildConnect) {
       shift @$aref if( UNIVERSAL::isa( $aref->[0], __PACKAGE__ ) );
-      push @l, DBI->connect(@$aref);
+      my $dbh=DBI->connect(@$aref);
+      push @l, $dbh if($dbh);
     }
     @ChildConnect=();
     @l=();
@@ -291,7 +292,7 @@ sub connect_on_init {
 
 
 # the connect method called from DBI::connect
-
+our %patched_classes=('Apache::DBI::Cache'=>1);
 sub connect {
   my $class = shift;
   unshift @_, $class if ref $class;
@@ -308,7 +309,8 @@ sub connect {
     if( @l ) {
       my $nocache;
       ($ctx, $nocache)=splice @l, 4, 2;
-      @args=@l;
+      @args[0..2]=@l[0..2];
+      %{$args[3]}=%{$l[3]};
       return $drh->connect(@args) if( $nocache );
     } else {
       return $drh->connect(@args);
@@ -316,17 +318,41 @@ sub connect {
   }
   my $dsn="dbi:$drh->{Name}:$args[0]";
 
+  my $RootClass=delete $args[3]->{RootClass};
+  unless( defined $RootClass ) {
+    # this is a very ugly hack
+    package DB;			# to get @DB::args set by caller()
+    for( my $i=1; my @l=caller($i++); ) {
+      if( $l[3] eq 'DBI::connect' ) {
+	$RootClass=$DB::args[0] unless( $DB::args[0] eq 'DBI' );
+	last;
+      }
+    }
+  }
+
   $Idx    =join $DELIMITER, $drh->{Name}, $args[0], $args[1], $args[2];
   $statIdx=join $DELIMITER, $drh->{Name}, $args[0], $args[1];
 
-  # the hash-reference differs between calls even in the same
-  # process, so de-reference the hash-reference 
   # should we default to '__undef__' or something for undef values?
   map { $Idx .= "$DELIMITER$_=" .
 	  (defined $args[3]->{$_}
 	   ? $args[3]->{$_}
 	   : '');
       } sort keys %{$args[3]};
+
+  if( defined $RootClass ) {
+    unless( $patched_classes{$RootClass} ) {
+      # this is a very ugly hack
+      $patched_classes{$RootClass}=1;
+      no strict 'refs';
+      no warnings 'redefine';
+      *{$RootClass.'::db::disconnect'}=\&Apache::DBI::Cache::db::disconnect;
+      *{$RootClass.'::db::DESTROY'}=\&Apache::DBI::Cache::db::DESTROY;
+    }
+    $args[3]->{RootClass}=$RootClass;
+  } else {
+    $args[3]->{RootClass}=__PACKAGE__;
+  }
 
   if( exists $Connected{$Idx} ) {
     while( my $dbh=shift @{$Connected{$Idx}} ) {
@@ -363,13 +389,14 @@ sub connect {
   my $dbh=$drh->connect(@args);
 
   if( defined $dbh ) {
+    my $privattr={%{$args[3]}};
+    delete $privattr->{RootClass};
     $dbh->{$PRIVATE}=+{
 		       disconnected=>0,
 		       idx=>$Idx,
 		       statIdx=>$statIdx,
-		       attr=>$args[3],
+		       attr=>$privattr,
 		      };
-    bless $dbh=>__PACKAGE__.'::db';
 
     if( exists $plugin{$drh->{Name}} ) {
       local $GLOBAL_DESTROY=2;
@@ -436,10 +463,10 @@ sub statistics {
   }
 }
 
-
-# this is almost copied from Apache::DBI
-# patch from Tim Bunce: Apache::DBI will not return a DBD ref cursor
-@Apache::DBI::Cache::st::ISA = ('DBI::st');
+{
+  package Apache::DBI::Cache::st;
+  use base qw(DBI::st);
+}
 
 # overload disconnect
 {
@@ -482,11 +509,13 @@ sub statistics {
 
   sub DESTROY {
     my $dbh=shift;
+
     if( $GLOBAL_DESTROY ) {
       if( $GLOBAL_DESTROY>1 ) {
 	$LOG->(2, "GLOBAL DESTROY $dbh->{$PRIVATE}->{idx}");
       }
       $dbh->SUPER::disconnect;
+      $dbh->SUPER::DESTROY;
     } else {
       $LOG->(2, "DESTROY $dbh->{$PRIVATE}->{idx}");
       $dbh->disconnect;

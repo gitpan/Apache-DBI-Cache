@@ -260,6 +260,39 @@ DESCRIPTION
   EXPORT
     Nothing.
 
+DBI SUBCLASSING
+    For a module like Apache::DBI::Cache it is complicated to cope with DBI
+    subclasses. There are 2 problems to solve. First, make sure that our
+    "disconnect" and "DESTROY" methods are called instead of the original.
+    Apache::DBI::Cache solves this problem by inserting its own methods into
+    the foreign class.
+
+    Hence, if a subclass provides "disconnect" and "DESTROY" methods they
+    will never be called. This is ugly but works in most cases.
+
+    To insert our methods into the subclass we need to know its name. This
+    is the second problem. To create a subclassed DBI handle one calls
+    either
+
+     DBI->connect( $dsn, $user, $passwd, {RootClass=>SUBCLASS} );
+
+    or
+
+     SUBCLASS->connect( $dsn, $user, $passwd, {} );
+
+    The first case is simple since the attribute hash is passed to our
+    connect method. Unfortunately, the second case is not simple since
+    "SUBCLASS" is known only by "DBI::connect". This is solved by searching
+    the current call stack for the DBI::connect call. Then we use its first
+    parameter.
+
+    That works for me but is even uglier. If you encounter problems don't
+    hesitate to mail me.
+
+Class::DBI and Ima::DBI
+    To make "Class::DBI" or "Ima::DBI" work with "Apache::DBI::Cache" see
+    Apache::DBI::Cache::ImaDBI.
+
 PLUGINS
     Plugins are used to modify the caching for certain database types. They
     can change the caching key, issue database commands just before a handle
@@ -365,7 +398,7 @@ SPONSORING
     thousand DBI connections.
 
 COPYRIGHT AND LICENSE
-    Copyright (C) 2005 by Torsten Foertsch
+    Copyright (C) 2005-2006 by Torsten Foertsch
 
     This library is free software; you can redistribute it and/or modify it
     under the same terms as Perl itself.

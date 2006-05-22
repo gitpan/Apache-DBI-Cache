@@ -11,7 +11,7 @@ BEGIN {
     $ENV{MYSQL_HOST}='localhost' unless exists $ENV{MYSQL_HOST};
     $ENV{MYSQL_USER}='' unless exists $ENV{MYSQL_USER};
     $ENV{MYSQL_PASSWD}='' unless exists $ENV{MYSQL_PASSWD};
-    plan tests=>7;
+    plan tests=>8;
   } else {
     plan skip_all => 'no database given, see README';
   }
@@ -27,8 +27,11 @@ my ($db1, $db2, $host, $user, $pw)=@ENV{qw/MYSQL1
 					   MYSQL_HOST
 					   MYSQL_USER
 					   MYSQL_PASSWD/};
+$host='localhost' unless( length $host );
 
 $Apache::DBI::Cache::DELIMITER='^';
+
+my $statkey="mysql^host=$host;port=3306^$user";
 
 sub current_db {
   my $dbh=shift;
@@ -53,13 +56,17 @@ Apache::DBI::Cache::init;
 
 my $stat=Apache::DBI::Cache::statistics;
 
-cmp_deeply( $stat->{"mysql^host=$host;port=3306^$user"}, [2,2,2,0,0],
+cmp_deeply( $stat->{$statkey}, [2,2,2,0,0],
 	    'connect_on_init' );
 
 my $dbh=DBI->connect("dbi:mysql:$db2:$host:3306", "$user", "$pw" );
+
+cmp_deeply( ref $dbh, 'Apache::DBI::Cache::db',
+	    'is a Apache::DBI::Cache::db' );
+
 ok( $dbh->{mysql_auto_reconnect}==0, 'mysql_auto_reconnect==0' );
 
-cmp_deeply( $stat->{"mysql^host=$host;port=3306^$user"}, [2,1,3,0,0],
+cmp_deeply( $stat->{$statkey}, [2,1,3,0,0],
 	    'usage count' );
 
 my ($dba, $dbb);
