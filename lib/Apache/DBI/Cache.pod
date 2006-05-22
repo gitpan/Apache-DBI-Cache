@@ -206,6 +206,8 @@ in a PerlChildInitHandler
 This function must be called before a process is going to terminate. Under
 mod_perl it is automatically called in a PerlChildExitHandler.
 
+As of version 0.08 calling this function is optional.
+
 =item B<undef_at_request_cleanup( \$dbh1, \$dbh2, ... )>
 
 When an application uses global variables to store handles they probably

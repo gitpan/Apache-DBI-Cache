@@ -2,6 +2,8 @@ use strict;
 use Test::More;
 use Test::Deep;
 
+sub n($) {my @c=caller; $c[1].'('.$c[2].'): '.$_[0];}
+
 # APACHE_DBI_CACHE_MYSQL1 and APACHE_DBI_CACHE_MYSQL2 should point to
 # 2 different databases on the same host and port.
 
@@ -57,31 +59,38 @@ Apache::DBI::Cache::init;
 my $stat=Apache::DBI::Cache::statistics;
 
 cmp_deeply( $stat->{$statkey}, [2,2,2,0,0],
-	    'connect_on_init' );
+	    n 'connect_on_init' );
 
 my $dbh=DBI->connect("dbi:mysql:$db2:$host:3306", "$user", "$pw" );
 
 cmp_deeply( ref $dbh, 'Apache::DBI::Cache::db',
-	    'is a Apache::DBI::Cache::db' );
+	    n 'is a Apache::DBI::Cache::db' );
 
-ok( $dbh->{mysql_auto_reconnect}==0, 'mysql_auto_reconnect==0' );
+ok( $dbh->{mysql_auto_reconnect}==0, n 'mysql_auto_reconnect==0' );
 
 cmp_deeply( $stat->{$statkey}, [2,1,3,0,0],
-	    'usage count' );
+	    n 'usage count' );
 
 my ($dba, $dbb);
 cmp_deeply( current_db($dba=DBI->connect("dbi:mysql:host=$host;database=$db1", "$user", "$pw" )),
-	    $db1, 'DB1' );
+	    $db1, n 'DB1' );
 $dba="$dba";
 
 cmp_deeply( current_db($dbb=DBI->connect("dbi:mysql:port=3306;db=$db2;host=$host", "$user", "$pw" )),
-	    $db2, 'DB2' );
+	    $db2, n 'DB2' );
 $dbb="$dbb";
 
-cmp_deeply( $dba, $dbb, 'got the same handle for different databases' );
+cmp_deeply( $dba, $dbb, n 'got the same handle for different databases' );
 
 undef $dbh;
-Apache::DBI::Cache::finish;
+
+$SIG{__WARN__}=sub {
+  print STDERR "@_";
+  fail n "finish() is optional";
+};
+
+# finish is now called automagically
+#Apache::DBI::Cache::finish;
 
 # Local Variables:
 # mode: perl

@@ -5,7 +5,7 @@ use strict;
 use warnings;
 no warnings 'uninitialized';
 
-our $VERSION = '0.07';
+our $VERSION = '0.08';
 
 BEGIN { eval { require Apache; } }
 BEGIN { eval { require mod_perl2; require Apache2::Module; } }
@@ -231,10 +231,12 @@ sub _statop {
     @ChildConnect=();
     @l=();
     $init=1;
+    eval 'END{finish();}';
     1;
   }
 
   sub finish {
+    return unless( $init );
     $GLOBAL_DESTROY=1;
     if( $STATdb ) {
       foreach (keys %localSTAT) {
@@ -321,7 +323,8 @@ sub connect {
   my $RootClass=delete $args[3]->{RootClass};
   unless( defined $RootClass ) {
     # this is a very ugly hack
-    package DB;			# to get @DB::args set by caller()
+    package		# this line break should make the CPAN indexer happy
+      DB;		# to get @DB::args set by caller()
     for( my $i=1; my @l=caller($i++); ) {
       if( $l[3] eq 'DBI::connect' ) {
 	$RootClass=$DB::args[0] unless( $DB::args[0] eq 'DBI' );
